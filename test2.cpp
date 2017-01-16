@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <utility>
@@ -228,6 +229,58 @@ struct MatrixFactory {
         }
     }
 };
+
+class MatrixFileIO {
+     std::ifstream in;
+
+public:
+     MatrixFileIO(const std::string& filename) : in(filename) {
+     }
+
+     std::shared_ptr<Matrix> readFile() {
+         int m, n, value;
+         in >> m >> n;
+         std::vector<int> d(m*n);
+         for (int i=0; i<m*n; ++i) {
+             in >> value;
+             d[i] = value;
+         }
+         return std::make_shared<DenseMatrix>(m, n, std::move(d));
+     }
+};
+
+class VectorFileIO {
+     std::ifstream in;
+
+public:
+     VectorFileIO(const std::string& filename) : in(filename) {
+     }
+
+     std::vector<int> readFile() {
+         int n, value;
+         in >> n;
+         std::vector<int> d(n);
+         for (int i=0; i<n; ++i) {
+             in >> value;
+             d[i] = value;
+         }
+         return d;
+     }
+};
+
+TEST(FileIO, TestOne) { 
+    MatrixFileIO fileIO("matrixTestOne.txt");
+    auto A = fileIO.readFile();
+    ASSERT_EQ(2, A->rowCount());
+    ASSERT_EQ(3, A->columnCount());
+    
+    VectorFileIO vecIO("vectorTestOne.txt");
+    std::vector<int> x = vecIO.readFile();
+    std::vector<int> b = A->product(x);
+    ASSERT_EQ(2, b.size());
+    ASSERT_EQ(1, b[0]);
+    ASSERT_EQ(-3, b[1]);
+}
 
 TEST(DenseMatrix, FactoryConstruction) { 
     auto m = MatrixFactory::build(DENSE_MATRIX, 2,3, {1, -1, 2, 
