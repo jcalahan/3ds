@@ -231,11 +231,17 @@ struct MatrixFactory {
 };
 
 class MatrixFileIO {
+protected:
      std::ifstream in;
 
 public:
-     MatrixFileIO(const std::string& filename) : in(filename) {
-     }
+     MatrixFileIO(const std::string& filename) : in(filename) {}
+     virtual std::shared_ptr<Matrix> readFile() = 0;
+};
+
+class DenseMatrixFileIO : public MatrixFileIO {
+public:
+     DenseMatrixFileIO(const std::string& filename) : MatrixFileIO(filename) {}
 
      std::shared_ptr<Matrix> readFile() {
          int m, n, value;
@@ -246,6 +252,22 @@ public:
              d[i] = value;
          }
          return std::make_shared<DenseMatrix>(m, n, std::move(d));
+     }
+};
+
+class SparseMatrixFileIO : public MatrixFileIO {
+public:
+     SparseMatrixFileIO(const std::string& filename) : MatrixFileIO(filename) {}
+
+     std::shared_ptr<Matrix> readFile() {
+         int m, n, value;
+         in >> m >> n;
+         std::vector<int> d(m*n);
+         for (int i=0; i<m*n; ++i) {
+             in >> value;
+             d[i] = value;
+         }
+         return std::make_shared<DictionaryOfKeysMatrix>(m, n, std::move(d));
      }
 };
 
@@ -268,8 +290,22 @@ public:
      }
 };
 
-TEST(FileIO, TestOne) { 
-    MatrixFileIO fileIO("matrixTestOne.txt");
+TEST(FileIO, DenseMatVecProd) { 
+    DenseMatrixFileIO fileIO("matrixTestOne.txt");
+    auto A = fileIO.readFile();
+    ASSERT_EQ(2, A->rowCount());
+    ASSERT_EQ(3, A->columnCount());
+    
+    VectorFileIO vecIO("vectorTestOne.txt");
+    std::vector<int> x = vecIO.readFile();
+    std::vector<int> b = A->product(x);
+    ASSERT_EQ(2, b.size());
+    ASSERT_EQ(1, b[0]);
+    ASSERT_EQ(-3, b[1]);
+}
+
+TEST(FileIO, SparseMatVecProd) { 
+    SparseMatrixFileIO fileIO("matrixTestOne.txt");
     auto A = fileIO.readFile();
     ASSERT_EQ(2, A->rowCount());
     ASSERT_EQ(3, A->columnCount());
