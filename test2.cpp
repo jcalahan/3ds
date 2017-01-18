@@ -6,8 +6,9 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+template<class T>
 class Matrix {
-    int rows, cols;
+    T rows, cols;
 
 protected: // disable copies
     Matrix() = default;
@@ -19,38 +20,39 @@ protected: // disable copies
 public:
     Matrix(int m, int n) : rows(m), cols(n) {}
 
-    virtual std::vector<int> product(const std::vector<int>& v) const = 0;
+    virtual std::vector<T> product(const std::vector<T>& v) const = 0;
 
     virtual std::shared_ptr<Matrix> product(const Matrix& m) const = 0;
 
     virtual std::shared_ptr<Matrix> transpose() const = 0;
 
-    virtual int get(int row, int col) const = 0;
+    virtual T get(int row, int col) const = 0;
 
     inline int rowCount() const { return rows; }
 
     inline int columnCount() const { return cols; }
 };
 
-class DenseMatrix : public Matrix {
-    std::vector<int> data;
+template<class T>
+class DenseMatrix : public Matrix<T> {
+    std::vector<T> data;
 
 public:
-    DenseMatrix(int m, int n, std::vector<int>&& d) : Matrix(m, n), data(d) {}
+    DenseMatrix(int m, int n, std::vector<T>&& d) : Matrix<T>(m, n), data(d) {}
     
-    std::vector<int> product(const std::vector<int>& x) const {
-        std::vector<int> b(rowCount());
-        for (auto i=0; i<rowCount(); ++i) {
-            for (auto j=0; j<columnCount(); ++j) {
+    std::vector<T> product(const std::vector<T>& x) const {
+        std::vector<T> b(this->rowCount());
+        for (auto i=0; i<this->rowCount(); ++i) {
+            for (auto j=0; j<this->columnCount(); ++j) {
                 b[i] += get(i,j) * x[j];
             }
         }
         return b;
     }
 
-    std::shared_ptr<Matrix> product(const Matrix& B) const {
+    std::shared_ptr<Matrix<T>> product(const Matrix<T>& B) const {
         const auto& A = *this;
-        std::vector<int> C(A.rowCount() * B.columnCount());
+        std::vector<T> C(A.rowCount() * B.columnCount());
         for (auto i=0; i<A.rowCount(); ++i) {
             for (auto j=0; j<B.columnCount(); ++j) {
                 for (auto k=0; k<B.rowCount(); ++k) {
@@ -58,45 +60,47 @@ public:
                 }
             }
         }
-        return std::make_shared<DenseMatrix>(A.rowCount(), B.columnCount(), std::move(C));
+        return std::make_shared<DenseMatrix<T>>(A.rowCount(), B.columnCount(), std::move(C));
     }
 
-    std::shared_ptr<Matrix> transpose() const {
+    std::shared_ptr<Matrix<T>> transpose() const {
         const auto& A = *this;
-        std::vector<int> At(A.rowCount() * A.columnCount());
+        std::vector<T> At(A.rowCount() * A.columnCount());
         for (auto i=0; i<A.rowCount(); ++i) {
             for (auto j=0; j<A.columnCount(); ++j) {
                 At[A.rowCount()*j+i] = A.get(i, j);
             }
         }
-        return std::make_shared<DenseMatrix>(A.columnCount(), A.rowCount(), std::move(At));
+        return std::make_shared<DenseMatrix<T>>(A.columnCount(), A.rowCount(), std::move(At));
     }
 
-    int get(int row, int col) const { return data[ columnCount() * row + col ]; }
+    T get(int row, int col) const { return data[ this->columnCount() * row + col ]; }
 };
 
-class SparseMatrix : public Matrix {
+template<class T>
+class SparseMatrix : public Matrix<T> {
 public:
-    SparseMatrix(int m, int n) : Matrix(m, n) {}
+    SparseMatrix(int m, int n) : Matrix<T>(m, n) {}
 };
 
-class CompressedSparseRowMatrix : public SparseMatrix {
-    std::vector<int> values; // len NNZ; non-zero values of M left-to-right
-    std::vector<int> row_ptr; // 0th = 0, ..., N-1th = NNZ
-    std::vector<int> col_idx; // len NNZ; column index of each element in values
+template<class T>
+class CompressedSparseRowMatrix : public SparseMatrix<T> {
+    std::vector<T> values; // len NNZ; non-zero values of M left-to-right
+    std::vector<T> row_ptr; // 0th = 0, ..., N-1th = NNZ
+    std::vector<T> col_idx; // len NNZ; column index of each element in values
 
 public:
-    CompressedSparseRowMatrix(int m, int n, const std::vector<int>& d) : SparseMatrix(m, n) {
+    CompressedSparseRowMatrix(int m, int n, const std::vector<T>& d) : SparseMatrix<T>(m, n) {
         auto nnz_total = 0,
              nnz_on_curr_row = 0;
 
         row_ptr.resize(m+1);
         row_ptr[0] = 0;
 
-        for (auto i=0; i<rowCount(); ++i) {
+        for (auto i=0; i<this->rowCount(); ++i) {
             nnz_on_curr_row = 0;
-            for (auto j=0; j<columnCount(); ++j) {
-                const auto val = d[columnCount() * i + j];
+            for (auto j=0; j<this->columnCount(); ++j) {
+                const auto val = d[this->columnCount() * i + j];
                 if (val != 0) {
                     ++nnz_total;
                     ++nnz_on_curr_row;
@@ -108,9 +112,9 @@ public:
         }
     }
     
-    std::vector<int> product(const std::vector<int>& v) const {
-        std::vector<int> b(rowCount());
-        for (auto i=0; i<rowCount(); ++i) {  
+    std::vector<T> product(const std::vector<T>& v) const {
+        std::vector<T> b(this->rowCount());
+        for (auto i=0; i<this->rowCount(); ++i) {  
             for (auto j=row_ptr[i]; j<row_ptr[i+1]; ++j) {
                 b[i] += values[j]*v[col_idx[j]];
             }  
@@ -118,9 +122,9 @@ public:
         return b;
     }
 
-    std::shared_ptr<Matrix> product(const Matrix& B) const {
+    std::shared_ptr<Matrix<T>> product(const Matrix<T>& B) const {
         const auto& A = *this;
-        std::vector<int> C(A.rowCount() * B.columnCount());
+        std::vector<T> C(A.rowCount() * B.columnCount());
         for (auto i=0; i<A.rowCount(); ++i) {
             for (auto j=0; j<B.columnCount(); ++j) {
                 for (auto k=0; k<B.rowCount(); ++k) {
@@ -128,24 +132,24 @@ public:
                 }
             }
         }
-        return std::make_shared<CompressedSparseRowMatrix>(A.rowCount(), B.columnCount(), std::move(C));
+        return std::make_shared<CompressedSparseRowMatrix<T>>(A.rowCount(), B.columnCount(), std::move(C));
     }
 
-    std::shared_ptr<Matrix> transpose() const {
-        std::vector<int> At(columnCount()*rowCount());
+    std::shared_ptr<Matrix<T>> transpose() const {
+        std::vector<T> At(this->columnCount()*this->rowCount());
 
-        for (auto i=0; i<rowCount(); ++i) {  
+        for (auto i=0; i<this->rowCount(); ++i) {  
             for (auto j=row_ptr[i]; j<row_ptr[i+1]; ++j) {
                 const auto row = i;
                 const auto col = col_idx[j];
-                At[rowCount()*col+row] = values[j];
+                At[this->rowCount()*col+row] = values[j];
             }  
         } 
 
-        return std::make_shared<CompressedSparseRowMatrix>(columnCount(), rowCount(), std::move(At));
+        return std::make_shared<CompressedSparseRowMatrix<T>>(this->columnCount(), this->rowCount(), std::move(At));
     }
 
-    int get(int row, int col) const {
+    T get(int row, int col) const {
         if (0 <= row && row <= row_ptr.size()-1) {
             for (auto j=row_ptr[row]; j<row_ptr[row+1]; ++j) {
                 if (col == col_idx[j]) {
@@ -157,15 +161,16 @@ public:
     }
 };
 
-class DictionaryOfKeysMatrix : public SparseMatrix {
+template<class T>
+class DictionaryOfKeysMatrix : public SparseMatrix<T> {
     typedef std::pair<int, int> Key;
-    std::map<Key, int> data;
+    std::map<Key, T> data;
 
 public:
-    DictionaryOfKeysMatrix(int m, int n, const std::vector<int>& d) : SparseMatrix(m, n) {
-        for (auto i=0; i<rowCount(); ++i) {
-            for (auto j=0; j<columnCount(); ++j) {
-                const auto val = d[columnCount() * i + j];
+    DictionaryOfKeysMatrix(int m, int n, const std::vector<T>& d) : SparseMatrix<T>(m, n) {
+        for (auto i=0; i<this->rowCount(); ++i) {
+            for (auto j=0; j<this->columnCount(); ++j) {
+                const auto val = d[this->columnCount() * i + j];
                 if (val != 0) {
                     data[std::make_pair(i,j)] = val;
                 }
@@ -173,19 +178,19 @@ public:
         }
     }
     
-    std::vector<int> product(const std::vector<int>& x) const {
-        std::vector<int> b(rowCount());
-        for (auto i=0; i<rowCount(); ++i) {
-            for (auto j=0; j<columnCount(); ++j) {
+    std::vector<T> product(const std::vector<T>& x) const {
+        std::vector<T> b(this->rowCount());
+        for (auto i=0; i<this->rowCount(); ++i) {
+            for (auto j=0; j<this->columnCount(); ++j) {
                 b[i] += get(i,j) * x[j];
             }
         }
         return b;
     }
 
-    std::shared_ptr<Matrix> product(const Matrix& B) const {
+    std::shared_ptr<Matrix<T>> product(const Matrix<T>& B) const {
         const auto& A = *this;
-        std::vector<int> C(A.rowCount() * B.columnCount());
+        std::vector<T> C(A.rowCount() * B.columnCount());
         for (auto i=0; i<A.rowCount(); ++i) {
             for (auto j=0; j<B.columnCount(); ++j) {
                 for (auto k=0; k<B.rowCount(); ++k) {
@@ -193,21 +198,21 @@ public:
                 }
             }
         }
-        return std::make_shared<DictionaryOfKeysMatrix>(A.rowCount(), B.columnCount(), std::move(C));
+        return std::make_shared<DictionaryOfKeysMatrix<T>>(A.rowCount(), B.columnCount(), std::move(C));
     }
 
-    std::shared_ptr<Matrix> transpose() const {
+    std::shared_ptr<Matrix<T>> transpose() const {
         const auto& A = *this;
-        std::vector<int> At(A.rowCount() * A.columnCount());
+        std::vector<T> At(A.rowCount() * A.columnCount());
         for (auto i=0; i<A.rowCount(); ++i) {
             for (auto j=0; j<A.columnCount(); ++j) {
                 At[A.rowCount()*j+i] = A.get(i, j);
             }
         }
-        return std::make_shared<DictionaryOfKeysMatrix>(A.columnCount(), A.rowCount(), std::move(At));
+        return std::make_shared<DictionaryOfKeysMatrix<T>>(A.columnCount(), A.rowCount(), std::move(At));
     }
 
-    int get(int row, int col) const {
+    T get(int row, int col) const {
         const auto itr = data.find(std::make_pair(row,col));
         return itr != data.end() ? itr->second : 0;
     }
@@ -220,57 +225,66 @@ enum MatrixForm {
 };
 
 struct MatrixFactory {
-    static std::shared_ptr<Matrix> build(MatrixForm form, int rows, int cols, std::vector<int>&& data) {
+    template<class T>
+    static std::shared_ptr<Matrix<T>> build(MatrixForm form, int rows, int cols, std::vector<T>&& data) {
         switch (form) {
-            case DENSE_MATRIX: return std::make_shared<DenseMatrix>(rows, cols, std::move(data));
-            case CSR_MATRIX:   return std::make_shared<CompressedSparseRowMatrix>(rows, cols, data);
-            case DOK_MATRIX:   return std::make_shared<DictionaryOfKeysMatrix>(rows, cols, data);
+            case DENSE_MATRIX: return std::make_shared<DenseMatrix<T>>(rows, cols, std::move(data));
+            case CSR_MATRIX:   return std::make_shared<CompressedSparseRowMatrix<T>>(rows, cols, data);
+            case DOK_MATRIX:   return std::make_shared<DictionaryOfKeysMatrix<T>>(rows, cols, data);
             default:           return nullptr;
         }
     }
 };
 
+template<class T>
 class MatrixFileIO {
-protected:
+public:
+     virtual std::shared_ptr<Matrix<T>> readFile() = 0;
+};
+
+template<class T>
+class DenseMatrixFileIO : public MatrixFileIO<T> {
      std::ifstream in;
 
 public:
-     MatrixFileIO(const std::string& filename) : in(filename) {}
-     virtual std::shared_ptr<Matrix> readFile() = 0;
-};
+     DenseMatrixFileIO(const std::string& filename) : in(filename) {}
 
-class DenseMatrixFileIO : public MatrixFileIO {
-public:
-     DenseMatrixFileIO(const std::string& filename) : MatrixFileIO(filename) {}
-
-     std::shared_ptr<Matrix> readFile() {
-         int m, n, value;
+     std::shared_ptr<Matrix<T>> readFile() {
+         int m, n;
          in >> m >> n;
-         std::vector<int> d(m*n);
-         for (int i=0; i<m*n; ++i) {
+         const auto size = m*n;
+         std::vector<T> d(size);
+         for (int i=0; i<size; ++i) {
+             T value;
              in >> value;
              d[i] = value;
          }
-         return std::make_shared<DenseMatrix>(m, n, std::move(d));
+         return std::make_shared<DenseMatrix<T>>(m, n, std::move(d));
      }
 };
 
-class SparseMatrixFileIO : public MatrixFileIO {
-public:
-     SparseMatrixFileIO(const std::string& filename) : MatrixFileIO(filename) {}
+template<class T>
+class SparseMatrixFileIO : public MatrixFileIO<T> {
+     std::ifstream in;
 
-     std::shared_ptr<Matrix> readFile() {
-         int m, n, value;
+public:
+     SparseMatrixFileIO(const std::string& filename) : in(filename) {}
+
+     std::shared_ptr<Matrix<T>> readFile() {
+         int m, n;
          in >> m >> n;
-         std::vector<int> d(m*n);
-         for (int i=0; i<m*n; ++i) {
+         const auto size = m*n;
+         std::vector<T> d(size);
+         for (int i=0; i<size; ++i) {
+             T value;
              in >> value;
              d[i] = value;
          }
-         return std::make_shared<DictionaryOfKeysMatrix>(m, n, std::move(d));
+         return std::make_shared<DictionaryOfKeysMatrix<T>>(m, n, std::move(d));
      }
 };
 
+template<class T>
 class VectorFileIO {
      std::ifstream in;
 
@@ -279,10 +293,11 @@ public:
      }
 
      std::vector<int> readFile() {
-         int n, value;
+         int n;
          in >> n;
-         std::vector<int> d(n);
+         std::vector<T> d(n);
          for (int i=0; i<n; ++i) {
+             T value;
              in >> value;
              d[i] = value;
          }
@@ -291,12 +306,12 @@ public:
 };
 
 TEST(FileIO, DenseMatVecProd) { 
-    DenseMatrixFileIO fileIO("matrixTestOne.txt");
+    DenseMatrixFileIO<int> fileIO("matrixTestOne.txt");
     auto A = fileIO.readFile();
     ASSERT_EQ(2, A->rowCount());
     ASSERT_EQ(3, A->columnCount());
     
-    VectorFileIO vecIO("vectorTestOne.txt");
+    VectorFileIO<int> vecIO("vectorTestOne.txt");
     std::vector<int> x = vecIO.readFile();
     std::vector<int> b = A->product(x);
     ASSERT_EQ(2, b.size());
@@ -305,12 +320,12 @@ TEST(FileIO, DenseMatVecProd) {
 }
 
 TEST(FileIO, SparseMatVecProd) { 
-    SparseMatrixFileIO fileIO("matrixTestOne.txt");
+    SparseMatrixFileIO<int> fileIO("matrixTestOne.txt");
     auto A = fileIO.readFile();
     ASSERT_EQ(2, A->rowCount());
     ASSERT_EQ(3, A->columnCount());
     
-    VectorFileIO vecIO("vectorTestOne.txt");
+    VectorFileIO<int> vecIO("vectorTestOne.txt");
     std::vector<int> x = vecIO.readFile();
     std::vector<int> b = A->product(x);
     ASSERT_EQ(2, b.size());
@@ -319,8 +334,8 @@ TEST(FileIO, SparseMatVecProd) {
 }
 
 TEST(DenseMatrix, FactoryConstruction) { 
-    auto m = MatrixFactory::build(DENSE_MATRIX, 2,3, {1, -1, 2, 
-                                                      0, -3, 1});
+    auto m = MatrixFactory::build<int>(DENSE_MATRIX, 2,3, {1, -1, 2, 
+                                                           0, -3, 1});
     ASSERT_EQ(2, m->rowCount());
     ASSERT_EQ(3, m->columnCount());
     ASSERT_EQ(1,  m->get(0,0));
@@ -332,21 +347,41 @@ TEST(DenseMatrix, FactoryConstruction) {
 }
 
 TEST(DenseMatrix, MatrixVectorProduct) { 
-    auto m = MatrixFactory::build(DENSE_MATRIX, 2,3, {1, -1, 2, 
-                                                      0, -3, 1});
-    std::vector<int> x = {2, 1, 0}; // input vector
-    std::vector<int> b = m->product(x);
+    auto m = MatrixFactory::build<int>(DENSE_MATRIX, 2,3, {1, -1, 2, 
+                                                           0, -3, 1});
+    const std::vector<int> x = {2, 1, 0}; // input vector
+    auto b = m->product(x);
     ASSERT_EQ(2, b.size());
     ASSERT_EQ(1, b[0]);
     ASSERT_EQ(-3, b[1]);
 }
 
+TEST(DenseMatrix, MatrixVectorProductFloat) { 
+    auto m = MatrixFactory::build<float>(DENSE_MATRIX, 2,3, {1.0, -1.0, 2.0, 
+                                                             0.0, -3.0, 1.0});
+    const std::vector<float> x = {2.0, 1.0, 0.0}; // input vector
+    auto b = m->product(x);
+    ASSERT_EQ(2.0, b.size());
+    ASSERT_EQ(1.0, b[0]);
+    ASSERT_EQ(-3.0, b[1]);
+}
+
+TEST(DenseMatrix, MatrixVectorProductDouble) { 
+    auto m = MatrixFactory::build<double>(DENSE_MATRIX, 2,3, {1.0, -1.0, 2.0, 
+                                                              0.0, -3.0, 1.0});
+    const std::vector<double> x = {2.0, 1.0, 0.0}; // input vector
+    auto b = m->product(x);
+    ASSERT_EQ(2.0, b.size());
+    ASSERT_EQ(1.0, b[0]);
+    ASSERT_EQ(-3.0, b[1]);
+}
+
 TEST(DenseMatrix, MatrixMatrixProduct) { 
-    auto A = MatrixFactory::build(DENSE_MATRIX, 2,3, {0, 4, -2,
-                                                      -4, -3, 0});
-    auto B = MatrixFactory::build(DENSE_MATRIX, 3,2, {0, 1, 
-                                                      1, -1,
-                                                      2, 3});
+    auto A = MatrixFactory::build<int>(DENSE_MATRIX, 2,3, {0, 4, -2,
+                                                           -4, -3, 0});
+    auto B = MatrixFactory::build<int>(DENSE_MATRIX, 3,2, {0, 1, 
+                                                           1, -1,
+                                                           2, 3});
     auto C = A->product(*B);
     ASSERT_EQ(2, C->rowCount());
     ASSERT_EQ(2, C->columnCount());
@@ -357,8 +392,8 @@ TEST(DenseMatrix, MatrixMatrixProduct) {
 }
 
 TEST(DenseMatrix, MatrixTranspose) { 
-    auto A = MatrixFactory::build(DENSE_MATRIX, 2,3, {1, 2, 3, 
-                                                      4, 5, 6});
+    auto A = MatrixFactory::build<int>(DENSE_MATRIX, 2,3, {1, 2, 3, 
+                                                           4, 5, 6});
     ASSERT_EQ(2, A->rowCount());
     ASSERT_EQ(3, A->columnCount());
     ASSERT_EQ(1, A->get(0,0));
@@ -380,10 +415,10 @@ TEST(DenseMatrix, MatrixTranspose) {
 }
 
 TEST(CSRMatrix, FactoryConstruction) { 
-    auto A = MatrixFactory::build(CSR_MATRIX, 4,4, {0, 0, 0, 0,
-                                                    5, 8, 0, 0,
-                                                    0, 0, 3, 0,
-                                                    0, 6, 0, 0});
+    auto A = MatrixFactory::build<int>(CSR_MATRIX, 4,4, {0, 0, 0, 0,
+                                                         5, 8, 0, 0,
+                                                         0, 0, 3, 0,
+                                                         0, 6, 0, 0});
     ASSERT_EQ(4, A->rowCount());
     ASSERT_EQ(4, A->columnCount());
     ASSERT_EQ(0, A->get(0,0));
@@ -405,10 +440,10 @@ TEST(CSRMatrix, FactoryConstruction) {
 }
 
 TEST(CSRMatrix, MatrixVectorProduct) { 
-    auto A = MatrixFactory::build(CSR_MATRIX, 4,4, {0, 0, 0, 0,
-                                                    5, 8, 0, 0,
-                                                    0, 0, 3, 0,
-                                                    0, 6, 0, 0});
+    auto A = MatrixFactory::build<int>(CSR_MATRIX, 4,4, {0, 0, 0, 0,
+                                                         5, 8, 0, 0,
+                                                         0, 0, 3, 0,
+                                                         0, 6, 0, 0});
     std::vector<int> x = {4, 3, 2, 1}; // input vector
     std::vector<int> b = A->product(x);
     ASSERT_EQ(4, b.size());
@@ -419,11 +454,11 @@ TEST(CSRMatrix, MatrixVectorProduct) {
 }
 
 TEST(CSRMatrix, MatrixMatrixProduct) { 
-    auto A = MatrixFactory::build(DENSE_MATRIX, 2,3, {0, 4, -2,
-                                                      -4, -3, 0});
-    auto B = MatrixFactory::build(DENSE_MATRIX, 3,2, {0, 1, 
-                                                      1, -1,
-                                                      2, 3});
+    auto A = MatrixFactory::build<int>(DENSE_MATRIX, 2,3, {0, 4, -2,
+                                                           -4, -3, 0});
+    auto B = MatrixFactory::build<int>(DENSE_MATRIX, 3,2, {0, 1, 
+                                                           1, -1,
+                                                           2, 3});
     auto C = A->product(*B);
     ASSERT_EQ(2, C->rowCount());
     ASSERT_EQ(2, C->columnCount());
@@ -434,8 +469,8 @@ TEST(CSRMatrix, MatrixMatrixProduct) {
 }
 
 TEST(CSRMatrix, MatrixTranspose) { 
-    auto A = MatrixFactory::build(CSR_MATRIX, 2,3, {1, 2, 3,
-                                                    4, 5, 6});
+    auto A = MatrixFactory::build<int>(CSR_MATRIX, 2,3, {1, 2, 3,
+                                                         4, 5, 6});
     ASSERT_EQ(2, A->rowCount());
     ASSERT_EQ(3, A->columnCount());
     ASSERT_EQ(1, A->get(0,0));
@@ -456,7 +491,8 @@ TEST(CSRMatrix, MatrixTranspose) {
     ASSERT_EQ(6, At->get(2,1));
 }
 
-void transposeTestFromBaseMatrixAPI(std::shared_ptr<Matrix> M) { 
+template<class T>
+void transposeTestFromBaseMatrixAPI(std::shared_ptr<Matrix<T>> M) { 
     ASSERT_EQ(2, M->rowCount());
     ASSERT_EQ(3, M->columnCount());
     ASSERT_EQ(1, M->get(0,0));
@@ -478,8 +514,8 @@ void transposeTestFromBaseMatrixAPI(std::shared_ptr<Matrix> M) {
 }
 
 TEST(DOKMatrix, FactoryConstruction) { 
-    auto m = MatrixFactory::build(DOK_MATRIX, 2,3, {1, -1, 2, 
-                                                    0, -3, 1});
+    auto m = MatrixFactory::build<int>(DOK_MATRIX, 2,3, {1, -1, 2, 
+                                                         0, -3, 1});
     ASSERT_EQ(2, m->rowCount());
     ASSERT_EQ(3, m->columnCount());
     ASSERT_EQ(1,  m->get(0,0));
@@ -491,8 +527,8 @@ TEST(DOKMatrix, FactoryConstruction) {
 }
 
 TEST(DOKMatrix, MatrixVectorProduct) { 
-    auto m = MatrixFactory::build(DOK_MATRIX, 2,3, {1, -1, 2, 
-                                                    0, -3, 1});
+    auto m = MatrixFactory::build<int>(DOK_MATRIX, 2,3, {1, -1, 2, 
+                                                         0, -3, 1});
     std::vector<int> x = {2, 1, 0}; // input vector
     std::vector<int> b = m->product(x);
     ASSERT_EQ(2, b.size());
@@ -501,11 +537,11 @@ TEST(DOKMatrix, MatrixVectorProduct) {
 }
 
 TEST(DOKMatrix, MatrixMatrixProduct) { 
-    auto A = MatrixFactory::build(DOK_MATRIX, 2,3, {0, 4, -2,
-                                                    -4, -3, 0});
-    auto B = MatrixFactory::build(DOK_MATRIX, 3,2, {0, 1, 
-                                                    1, -1,
-                                                    2, 3});
+    auto A = MatrixFactory::build<int>(DOK_MATRIX, 2,3, {0, 4, -2,
+                                                         -4, -3, 0});
+    auto B = MatrixFactory::build<int>(DOK_MATRIX, 3,2, {0, 1, 
+                                                         1, -1,
+                                                         2, 3});
     auto C = A->product(*B);
     ASSERT_EQ(2, C->rowCount());
     ASSERT_EQ(2, C->columnCount());
@@ -516,8 +552,8 @@ TEST(DOKMatrix, MatrixMatrixProduct) {
 }
 
 TEST(DOKMatrix, MatrixTranspose) { 
-    auto A = MatrixFactory::build(DOK_MATRIX, 2,3, {1, 2, 3, 
-                                                    4, 5, 6});
+    auto A = MatrixFactory::build<int>(DOK_MATRIX, 2,3, {1, 2, 3, 
+                                                         4, 5, 6});
     ASSERT_EQ(2, A->rowCount());
     ASSERT_EQ(3, A->columnCount());
     ASSERT_EQ(1, A->get(0,0));
@@ -539,15 +575,15 @@ TEST(DOKMatrix, MatrixTranspose) {
 }
 
 TEST(PolymorphicMatrix, MatrixTranspose) { 
-    auto A1 = MatrixFactory::build(DENSE_MATRIX, 2,3, {1, 2, 3,
-                                                       4, 5, 6});
-    auto A2 = MatrixFactory::build(CSR_MATRIX, 2,3, {1, 2, 3,
-                                                     4, 5, 6});
-    auto A3 = MatrixFactory::build(DOK_MATRIX, 2,3, {1, 2, 3,
-                                                     4, 5, 6});
-    transposeTestFromBaseMatrixAPI(A1);
-    transposeTestFromBaseMatrixAPI(A2);
-    transposeTestFromBaseMatrixAPI(A3);
+    auto A1 = MatrixFactory::build<int>(DENSE_MATRIX, 2,3, {1, 2, 3,
+                                                            4, 5, 6});
+    auto A2 = MatrixFactory::build<int>(CSR_MATRIX, 2,3, {1, 2, 3,
+                                                          4, 5, 6});
+    auto A3 = MatrixFactory::build<int>(DOK_MATRIX, 2,3, {1, 2, 3,
+                                                          4, 5, 6});
+    transposeTestFromBaseMatrixAPI<int>(A1);
+    transposeTestFromBaseMatrixAPI<int>(A2);
+    transposeTestFromBaseMatrixAPI<int>(A3);
 }
 
 int main(int argc, char **argv) {
