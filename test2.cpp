@@ -6,6 +6,8 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+const double TEST_TOLERANCE = 0.01;
+
 template<class T>
 class Matrix {
     T rows, cols;
@@ -75,6 +77,8 @@ public:
     }
 
     T get(int row, int col) const { return data[ this->columnCount() * row + col ]; }
+
+    void set(int row, int col, T value) { data[ this->columnCount() * row + col ] = value; }
 };
 
 template<class T>
@@ -305,6 +309,62 @@ public:
      }
 };
 
+struct GaussianMethods {
+    template<class T>
+    static std::vector<T> elimination(DenseMatrix<T>& A, std::vector<T>& b) {
+        const auto N = A.rowCount();
+
+        std::vector<T> x(N);
+
+        // step 1
+
+        for (auto c2e=0; c2e<N-1; ++c2e) { // c2e == column_to_eliminate
+            const auto denominator = A.get(c2e, c2e);
+            for (auto row=c2e+1; row<N; ++row) {
+                const auto numerator = A.get(row, c2e);
+                const auto R = numerator / denominator;
+                for (auto col=row; col<N; ++col) {
+                    if (row == col) {
+                        A.set(row, c2e, 0.0);
+                    } else {
+                        auto cValue = A.get(row, col);
+                        auto pValue = A.get(row-1, col);
+                        auto nValue = cValue - R * pValue;
+                        A.set(row, col, nValue);
+                    }
+                }
+                b[row] = b[row] - R * b[c2e];
+            }
+        }
+
+        // step 2
+
+        x[N-1] = b[N-1] / A.get(N-1,N-1);
+
+        for (auto i=N-2; i>=0; --i) {
+            T sum = 0;
+            for (auto j=i+1; j<N; ++j) {
+                sum += A.get(i,j) * x[j];
+            }
+            x[i] = (b[i] - sum) / A.get(i,i);
+        }
+
+        return x;
+    }
+};
+
+TEST(GaussianMethods, Elimination) {
+    DenseMatrix<float> A(3,3, {3.0000, -0.1000, -0.2000,
+                               0.1000,  7.0000, -0.3000,
+                               0.3000, -0.2000, 10.0000});
+    std::vector<float> b = {7.85, -19.3, 71.4};
+    auto x = GaussianMethods::elimination<float>(A, b);
+    ASSERT_EQ(3, x.size());
+    ASSERT_NEAR(3.0, x[0], TEST_TOLERANCE);
+    ASSERT_NEAR(-2.5, x[1], TEST_TOLERANCE);
+    ASSERT_NEAR(7.0, x[2], TEST_TOLERANCE);
+}
+
 TEST(FileIO, DenseMatVecProd) { 
     DenseMatrixFileIO<int> fileIO("matrixTestOne.txt");
     auto A = fileIO.readFile();
@@ -361,9 +421,9 @@ TEST(DenseMatrix, MatrixVectorProductFloat) {
                                                              0.0, -3.0, 1.0});
     const std::vector<float> x = {2.0, 1.0, 0.0}; // input vector
     auto b = m->product(x);
-    ASSERT_EQ(2.0, b.size());
-    ASSERT_EQ(1.0, b[0]);
-    ASSERT_EQ(-3.0, b[1]);
+    ASSERT_EQ(2, b.size());
+    ASSERT_NEAR(1.0, b[0], TEST_TOLERANCE);
+    ASSERT_NEAR(-3.0, b[1], TEST_TOLERANCE);
 }
 
 TEST(DenseMatrix, MatrixVectorProductDouble) { 
@@ -371,9 +431,9 @@ TEST(DenseMatrix, MatrixVectorProductDouble) {
                                                               0.0, -3.0, 1.0});
     const std::vector<double> x = {2.0, 1.0, 0.0}; // input vector
     auto b = m->product(x);
-    ASSERT_EQ(2.0, b.size());
-    ASSERT_EQ(1.0, b[0]);
-    ASSERT_EQ(-3.0, b[1]);
+    ASSERT_EQ(2, b.size());
+    ASSERT_NEAR(1.0, b[0], TEST_TOLERANCE);
+    ASSERT_NEAR(-3.0, b[1], TEST_TOLERANCE);
 }
 
 TEST(DenseMatrix, MatrixMatrixProduct) { 
